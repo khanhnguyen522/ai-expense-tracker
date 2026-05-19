@@ -1,7 +1,6 @@
 const Anthropic = require("@anthropic-ai/sdk");
 const fs = require("fs");
-const path = require("path");
-const sharp = require("sharp");
+const heicConvert = require("heic-convert");
 require("dotenv").config();
 
 const client = new Anthropic({
@@ -9,13 +8,24 @@ const client = new Anthropic({
 });
 
 const readReceipt = async (imagePath) => {
-  // resize image before sending to Claude
-  const resizedBuffer = await sharp(imagePath)
-    .resize(800, 1200, { fit: "inside" })
-    .jpeg({ quality: 80 })
-    .toBuffer();
+  let imageData = fs.readFileSync(imagePath);
 
-  const base64Image = resizedBuffer.toString("base64");
+  // Check if HEIC by magic bytes
+  const header = imageData.slice(4, 12).toString("ascii");
+  if (header.includes("ftyp")) {
+    // Convert HEIC to JPEG
+    const jpegBuffer = await heicConvert({
+      buffer: imageData,
+      format: "JPEG",
+      quality: 0.8,
+    });
+    imageData = Buffer.from(jpegBuffer);
+  }
+
+  const base64Image = imageData.toString("base64");
+  try {
+    fs.unlinkSync(imagePath);
+  } catch (e) {}
 
   const message = await client.messages.create({
     model: "claude-sonnet-4-6",
@@ -49,9 +59,6 @@ const readReceipt = async (imagePath) => {
 
   const responseText = message.content[0].text;
   const cleaned = responseText.replace(/```json|```/g, "").trim();
-
-  // Clean up temp file
-  fs.unlinkSync(imagePath);
   return JSON.parse(cleaned);
 };
 
