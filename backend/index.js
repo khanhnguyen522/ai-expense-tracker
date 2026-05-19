@@ -107,6 +107,12 @@ app.get("/insights", async (req, res) => {
   res.json({ insights: message.content[0].text });
 });
 
+// delete receipt
+app.delete("/receipts/:id", async (req, res) => {
+  await pool.query("DELETE FROM receipts WHERE id = $1", [req.params.id]);
+  res.json({ message: "Receipt deleted" });
+});
+
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
 });

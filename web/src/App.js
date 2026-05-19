@@ -51,6 +51,11 @@ function App() {
     setLoadingInsights(false);
   };
 
+  const deleteReceipt = async (id) => {
+    await axios.delete(`${API}/receipts/${id}`);
+    fetchReceipts();
+  };
+
   const categoryTotals = receipts.reduce((acc, r) => {
     acc[r.category] = (acc[r.category] || 0) + parseFloat(r.amount);
     return acc;
@@ -62,6 +67,16 @@ function App() {
   }));
 
   const totalSpent = receipts.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "No date";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
 
   return (
     <div
@@ -203,6 +218,7 @@ function App() {
               marginBottom: "10px",
               display: "flex",
               justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
             <div>
@@ -219,12 +235,28 @@ function App() {
                 {r.category}
               </span>
               <p style={{ margin: "5px 0 0", color: "#666", fontSize: "14px" }}>
-                {r.date}
+                {formatDate(r.date)}
               </p>
             </div>
-            <strong style={{ color: "#0088FE", fontSize: "18px" }}>
-              ${parseFloat(r.amount).toFixed(2)}
-            </strong>
+            <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+              <strong style={{ color: "#0088FE", fontSize: "18px" }}>
+                ${parseFloat(r.amount).toFixed(2)}
+              </strong>
+              <button
+                onClick={() => deleteReceipt(r.id)}
+                style={{
+                  background: "none",
+                  border: "1px solid #ff4444",
+                  color: "#ff4444",
+                  padding: "5px 10px",
+                  borderRadius: "5px",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                }}
+              >
+                Delete
+              </button>
+            </div>
           </div>
         ))}
       </div>
