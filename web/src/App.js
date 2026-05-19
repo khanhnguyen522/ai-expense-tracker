@@ -10,6 +10,8 @@ function App() {
   const [receipts, setReceipts] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const [insights, setInsights] = useState("");
+  const [loadingInsights, setLoadingInsights] = useState(false);
 
   useEffect(() => {
     fetchReceipts();
@@ -40,6 +42,13 @@ function App() {
       setMessage("Could not read receipt. Try another image.");
     }
     setUploading(false);
+  };
+
+  const getInsights = async () => {
+    setLoadingInsights(true);
+    const res = await axios.get(`${API}/insights`);
+    setInsights(res.data.insights);
+    setLoadingInsights(false);
   };
 
   const categoryTotals = receipts.reduce((acc, r) => {
@@ -142,6 +151,42 @@ function App() {
           </ResponsiveContainer>
         </div>
       )}
+
+      <div
+        style={{
+          background: "#f5f5f5",
+          padding: "20px",
+          borderRadius: "10px",
+          marginBottom: "20px",
+        }}
+      >
+        <h2>AI Spending Insights</h2>
+        <button
+          onClick={getInsights}
+          disabled={loadingInsights}
+          style={{
+            background: "#0088FE",
+            color: "white",
+            border: "none",
+            padding: "10px 20px",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontSize: "16px",
+            marginBottom: "15px",
+          }}
+        >
+          {loadingInsights ? "Analyzing..." : "Analyze My Spending"}
+        </button>
+        {insights && (
+          <div style={{ lineHeight: "1.8" }}>
+            {insights.split("\n").map((line, i) => (
+              <p key={i} style={{ marginBottom: "10px" }}>
+                {line.replace(/\*\*/g, "")}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div
         style={{ background: "#f5f5f5", padding: "20px", borderRadius: "10px" }}

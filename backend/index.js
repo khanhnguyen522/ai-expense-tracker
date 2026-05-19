@@ -76,6 +76,37 @@ app.post("/receipts", upload.single("receipt"), async (req, res) => {
   }
 });
 
+// AI spending insights
+app.get("/insights", async (req, res) => {
+  const result = await pool.query(
+    "SELECT * FROM receipts ORDER BY created_at DESC",
+  );
+
+  if (result.rows.length == 0) {
+    return res.json({
+      insights: "No receipts yet. Upload some receipts first.",
+    });
+  }
+
+  const receiptSummary = result.rows
+    .map((r) => `${r.store_name} - $${r.amount} (${r.category}) on ${r.date}`)
+    .join("\n");
+
+  const message = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `Analyze these receipts and give 3-4 short spending insights: ${receiptSummary} 
+                Keep each insights to one sentence. Be specific with numbers.`,
+      },
+    ],
+  });
+
+  res.json({ insights: message.content[0].text });
+});
+
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
 });
