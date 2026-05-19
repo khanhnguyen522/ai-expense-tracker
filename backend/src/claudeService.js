@@ -49,6 +49,9 @@ const readReceipt = async (imagePath) => {
 
   const responseText = message.content[0].text;
   const cleaned = responseText.replace(/```json|```/g, "").trim();
+
+  // Clean up temp file
+  fs.unlinkSync(imagePath);
   return JSON.parse(cleaned);
 };
 
