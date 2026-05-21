@@ -14,7 +14,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
 
-const API = "http://192.168.1.20:3000";
+const API = "http://18.118.150.146:3000";
 
 export default function App() {
   const [receipts, setReceipts] = useState([]);

@@ -3,7 +3,7 @@ import axios from "axios";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import "./App.css";
 
-const API = "http://localhost:3000";
+const API = "http://18.118.150.146:3000";
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
 
 function App() {
