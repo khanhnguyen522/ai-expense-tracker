@@ -9,7 +9,13 @@ const { readReceipt } = require("./src/claudeService");
 const upload = multer({ dest: "uploads/" });
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "DELETE", "PUT"],
+    allowedHeaders: ["Content-Type"],
+  }),
+);
 app.use(express.json());
 
 const client = new Anthropic({
