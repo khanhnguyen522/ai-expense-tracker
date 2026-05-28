@@ -218,16 +218,16 @@ ai-expense-tracker/
 ## Key Engineering Decisions
 
 **Why Claude API for receipt scanning?**
-Receipt images vary wildly in format, quality, and layout. Claude's vision capabilities handle messy, crumpled, or low-quality receipts better than traditional OCR approaches, and returns structured JSON without additional parsing logic.
+Receipt photos are unpredictable — blurry, crumpled, or angled. Claude reads them like a human would and returns clean structured JSON directly, no extra parsing needed.
 
 **Why Docker for PostgreSQL?**
-Containerizing the database ensures consistent behavior across development and production environments. Anyone cloning the repo can run `docker-compose up -d` and have an identical database setup in seconds.
+The entire database setup lives in one file. Anyone cloning the repo runs `docker-compose up -d` and gets an identical environment in seconds, no manual installation required.
 
-**Why Nginx as reverse proxy?**
-Running Node.js directly on port 80/443 requires root privileges. Nginx handles SSL termination and forwards traffic to the Node.js process running on port 3000, following the principle of least privilege.
+**Why Nginx as a reverse proxy?**
+Node.js shouldn't run directly on port 443 — that requires root access, which is a security risk. Nginx handles HTTPS and forwards clean traffic to Node.js on port 3000.
 
-**Why heic-convert on the backend instead of the frontend?**
-iPhones save photos in HEIC format by default. Converting on the backend means the mobile app doesn't need to handle format conversion, keeping the client code simple. The backend converts HEIC to JPEG before sending to Claude.
+**Why heic-convert on the backend?**
+iPhones save photos as HEIC by default, which Claude doesn't support. The backend converts automatically so the mobile app stays simple — it just sends whatever photo the user picks.
 
 ---
 
