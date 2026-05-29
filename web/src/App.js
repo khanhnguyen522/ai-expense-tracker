@@ -3,17 +3,18 @@ import axios from "axios";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 const API = "https://api.expense-tracker.sbs";
+const MONTHLY_BUDGET = 300;
 
 const CATEGORY_CONFIG = {
-  groceries: { color: "#185FA5", bg: "#E6F1FB", icon: "🛒" },
-  food: { color: "#0F6E56", bg: "#E1F5EE", icon: "🍔" },
-  dining: { color: "#0F6E56", bg: "#E1F5EE", icon: "🍽️" },
-  restaurant: { color: "#BA7517", bg: "#FAEEDA", icon: "☕" },
-  shopping: { color: "#533AB7", bg: "#EEEDFE", icon: "🛍️" },
-  transport: { color: "#3B6D11", bg: "#EAF3DE", icon: "🚗" },
-  entertainment: { color: "#993556", bg: "#FBEAF0", icon: "🎬" },
-  health: { color: "#A32D2D", bg: "#FCEBEB", icon: "💊" },
-  other: { color: "#5F5E5A", bg: "#F1EFE8", icon: "📄" },
+  groceries: { color: "#0C447C", bg: "#E6F1FB", icon: "🛒" },
+  food: { color: "#085041", bg: "#E1F5EE", icon: "🍔" },
+  dining: { color: "#085041", bg: "#E1F5EE", icon: "🍽️" },
+  restaurant: { color: "#633806", bg: "#FAEEDA", icon: "☕" },
+  shopping: { color: "#3C3489", bg: "#EEEDFE", icon: "🛍️" },
+  transport: { color: "#27500A", bg: "#EAF3DE", icon: "🚗" },
+  entertainment: { color: "#72243E", bg: "#FBEAF0", icon: "🎬" },
+  health: { color: "#791F1F", bg: "#FCEBEB", icon: "💊" },
+  other: { color: "#444441", bg: "#F1EFE8", icon: "📄" },
 };
 
 const PIE_COLORS = [
@@ -27,16 +28,13 @@ const PIE_COLORS = [
 
 const getCategoryConfig = (cat) =>
   CATEGORY_CONFIG[cat?.toLowerCase()] || CATEGORY_CONFIG.other;
-
 const formatCurrency = (val) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
     val,
   );
-
 const formatDate = (dateString) => {
   if (!dateString) return "No date";
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -64,9 +62,12 @@ export default function App() {
   const [message, setMessage] = useState(null);
   const [insights, setInsights] = useState("");
   const [loadingInsights, setLoadingInsights] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [filterMonth, setFilterMonth] = useState("all");
-  const [filterYear, setFilterYear] = useState("all");
+  const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth()));
+  const [filterYear, setFilterYear] = useState(
+    String(new Date().getFullYear()),
+  );
   const fileRef = useRef();
 
   useEffect(() => {
@@ -83,7 +84,7 @@ export default function App() {
   const handleFile = async (file) => {
     if (!file) return;
     setUploading(true);
-    setMessage({ type: "loading", text: "Claude is reading your receipt..." });
+    setMessage({ type: "loading", text: "Scanning your receipt..." });
     const formData = new FormData();
     formData.append("receipt", file);
     try {
@@ -112,23 +113,19 @@ export default function App() {
   };
 
   const deleteReceipt = async (id) => {
+    if (!window.confirm("Delete this receipt?")) return;
     await axios.delete(`${API}/receipts/${id}`);
     fetchReceipts();
   };
 
-  // Get unique years from receipts
   const availableYears = [
     ...new Set(
       receipts
-        .map((r) => {
-          if (!r.date) return null;
-          return new Date(r.date).getFullYear();
-        })
+        .map((r) => (r.date ? new Date(r.date).getFullYear() : null))
         .filter(Boolean),
     ),
   ].sort((a, b) => b - a);
 
-  // Filter receipts
   const filteredReceipts = receipts.filter((r) => {
     if (!r.date) return filterMonth === "all" && filterYear === "all";
     const date = new Date(r.date);
@@ -155,7 +152,14 @@ export default function App() {
   }));
 
   const topCategory =
-    [...pieData].sort((a, b) => b.value - a.value)[0]?.name || "—";
+    [...pieData].sort((a, b) => b.value - a.value)[0]?.name || null;
+
+  // Budget calculations — only meaningful when a specific month is selected
+  const isMonthView = filterMonth !== "all" && filterYear !== "all";
+  const budgetPct = Math.min((totalSpent / MONTHLY_BUDGET) * 100, 100);
+  const overBudget = totalSpent > MONTHLY_BUDGET;
+  const overAmount = totalSpent - MONTHLY_BUDGET;
+  const remaining = MONTHLY_BUDGET - totalSpent;
 
   const filterLabel = () => {
     if (filterMonth === "all" && filterYear === "all") return "All time";
@@ -164,43 +168,46 @@ export default function App() {
     return `${MONTHS[parseInt(filterMonth)]} ${filterYear}`;
   };
 
+  const handleInsightsClick = () => {
+    setShowInsights(true);
+    if (!insights) getInsights();
+  };
+
   return (
-    <div style={styles.root}>
+    <div style={s.root}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #F7F6F3; font-family: 'DM Sans', sans-serif; }
-        .drop-zone { transition: all 0.2s ease; }
-        .drop-zone:hover, .drop-zone.drag-over { background: #EEF4FF !important; border-color: #185FA5 !important; }
-        .receipt-row { transition: background 0.15s; }
+        .upload-zone { transition: border-color 0.15s, background 0.15s; }
+        .upload-zone:hover, .upload-zone.drag-over { border-color: #185FA5 !important; background: #F0F6FD !important; }
+        .receipt-row { transition: background 0.1s; border-radius: 8px; }
         .receipt-row:hover { background: #FAFAF9; }
-        .delete-btn { opacity: 0; transition: opacity 0.15s; background: none; border: none; cursor: pointer; padding: 6px; border-radius: 6px; color: #A32D2D; }
-        .receipt-row:hover .delete-btn { opacity: 1; }
-        .delete-btn:hover { background: #FCEBEB; }
-        .insight-btn { transition: all 0.15s; }
-        .insight-btn:hover { opacity: 0.88; transform: translateY(-1px); }
-        select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px !important; cursor: pointer; }
-        select:focus { outline: none; border-color: #185FA5 !important; }
+        .receipt-row:hover .del-btn { opacity: 1 !important; }
+        .del-btn { opacity: 0; transition: opacity 0.12s, background 0.12s, border-color 0.12s; }
+        .del-btn:hover { background: #FCEBEB !important; border-color: #F7C1C1 !important; color: #A32D2D !important; }
+        .insight-pill:hover:not(:disabled) { background: #F0F6FD !important; border-color: #B5D4F4 !important; }
+        .insight-pill:disabled { opacity: 0.6; cursor: not-allowed; }
+        select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; padding-right: 28px !important; cursor: pointer; }
+        select:focus { outline: 2px solid #185FA5; outline-offset: 1px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+        @keyframes fillBar { from { width: 0%; } to { width: var(--bar-w); } }
+        .fade-in { animation: fadeIn 0.2s ease; }
+        .budget-bar-fill { animation: fillBar 0.6s ease forwards; }
       `}</style>
 
-      <div style={styles.container}>
+      <div style={s.container}>
         {/* Header */}
-        <div style={styles.header}>
-          <div>
-            <h1 style={styles.h1}>Expense tracker</h1>
-            <p style={styles.subtitle}>AI-powered receipt scanning</p>
-          </div>
-          <div style={styles.headerBadge}>
-            <span style={{ fontSize: 11, color: "#185FA5", fontWeight: 500 }}>
-              Powered by Claude
-            </span>
-          </div>
+        <div style={s.header}>
+          <h1 style={s.h1}>Expense tracker</h1>
+          <p style={s.subtitle}>Receipt scanning & spending insights</p>
         </div>
 
-        {/* Upload */}
+        {/* Upload zone */}
         <div
-          className={`drop-zone ${dragOver ? "drag-over" : ""}`}
-          style={styles.uploadZone}
+          className={`upload-zone ${dragOver ? "drag-over" : ""}`}
+          style={s.uploadZone}
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
@@ -211,7 +218,7 @@ export default function App() {
             setDragOver(false);
             handleFile(e.dataTransfer.files[0]);
           }}
-          onClick={() => fileRef.current?.click()}
+          onClick={() => !uploading && fileRef.current?.click()}
         >
           <input
             ref={fileRef}
@@ -223,87 +230,118 @@ export default function App() {
           />
           {uploading ? (
             <div style={{ textAlign: "center" }}>
-              <div style={styles.spinner} />
+              <div style={s.spinner} />
               <p
                 style={{
                   color: "#185FA5",
-                  fontSize: 14,
+                  fontSize: 13,
                   marginTop: 12,
                   fontWeight: 500,
                 }}
               >
-                Claude is reading your receipt...
+                Scanning your receipt...
               </p>
             </div>
           ) : (
             <div style={{ textAlign: "center" }}>
-              <div style={styles.uploadIcon}>↑</div>
+              <div style={s.uploadIconBox}>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#185FA5"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
               <p
                 style={{
                   fontSize: 14,
-                  color: "#444",
+                  color: "#333",
                   fontWeight: 500,
-                  marginBottom: 4,
+                  marginBottom: 3,
                 }}
               >
-                Drop a receipt here or click to browse
+                Drop a receipt or click to browse
               </p>
-              <p style={{ fontSize: 12, color: "#888" }}>
-                JPG, PNG or HEIC — Claude extracts store, amount, date
-                automatically
+              <p style={{ fontSize: 12, color: "#999" }}>
+                JPG, PNG or HEIC — store, amount & date extracted automatically
               </p>
             </div>
           )}
         </div>
 
-        {message && (
+        {/* Status message */}
+        {message && !uploading && (
           <div
+            className="fade-in"
             style={{
-              ...styles.msg,
+              ...s.msg,
               background:
                 message.type === "success"
                   ? "#E1F5EE"
                   : message.type === "error"
                     ? "#FCEBEB"
                     : "#E6F1FB",
+              borderColor:
+                message.type === "success"
+                  ? "#9FE1CB"
+                  : message.type === "error"
+                    ? "#F7C1C1"
+                    : "#B5D4F4",
               color:
                 message.type === "success"
-                  ? "#0F6E56"
+                  ? "#085041"
                   : message.type === "error"
-                    ? "#A32D2D"
-                    : "#185FA5",
+                    ? "#791F1F"
+                    : "#0C447C",
             }}
           >
-            {message.type === "success"
-              ? "✓ "
-              : message.type === "error"
-                ? "✕ "
-                : "⟳ "}
+            <span style={{ fontSize: 14, flexShrink: 0 }}>
+              {message.type === "success" ? "✓" : "✕"}
+            </span>
             {message.text}
           </div>
         )}
 
-        {/* Filter Bar */}
-        <div style={styles.filterBar}>
-          <div style={styles.filterLabel}>
-            Showing: <strong>{filterLabel()}</strong>
-            {(filterMonth !== "all" || filterYear !== "all") && (
-              <button
-                onClick={() => {
-                  setFilterMonth("all");
-                  setFilterYear("all");
-                }}
-                style={styles.clearFilter}
-              >
-                Clear
-              </button>
-            )}
+        {/* Filter bar */}
+        <div style={s.filterBar}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 13,
+              color: "#666",
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#999"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            <span>
+              Showing <strong style={{ color: "#333" }}>{filterLabel()}</strong>
+            </span>
           </div>
-          <div style={styles.filterControls}>
+          <div style={{ display: "flex", gap: 8 }}>
             <select
               value={filterMonth}
               onChange={(e) => setFilterMonth(e.target.value)}
-              style={styles.select}
+              style={s.select}
             >
               <option value="all">All months</option>
               {MONTHS.map((m, i) => (
@@ -315,7 +353,7 @@ export default function App() {
             <select
               value={filterYear}
               onChange={(e) => setFilterYear(e.target.value)}
-              style={styles.select}
+              style={s.select}
             >
               <option value="all">All years</option>
               {availableYears.map((y) => (
@@ -328,218 +366,375 @@ export default function App() {
         </div>
 
         {/* Stats */}
-        <div style={styles.statsRow}>
-          {[
-            {
-              label: "Total spent",
-              value: formatCurrency(totalSpent),
-              accent: "#185FA5",
-            },
-            {
-              label: "Receipts",
-              value: filteredReceipts.length,
-              accent: "#0F6E56",
-            },
-            {
-              label: "Top category",
-              value: topCategory || "—",
-              accent: "#BA7517",
-            },
-          ].map((s) => (
-            <div key={s.label} style={styles.statCard}>
-              <div style={styles.statLabel}>{s.label}</div>
-              <div style={{ ...styles.statValue, color: s.accent }}>
-                {s.value}
-              </div>
+        <div style={s.statsRow}>
+          <div style={s.statCard}>
+            <div style={s.statLabel}>Total spent</div>
+            <div style={{ ...s.statValue, color: "#185FA5" }}>
+              {formatCurrency(totalSpent)}
             </div>
-          ))}
+          </div>
+          <div style={s.statCard}>
+            <div style={s.statLabel}>Receipts</div>
+            <div style={{ ...s.statValue, color: "#0F6E56" }}>
+              {filteredReceipts.length}
+            </div>
+          </div>
+          <div style={s.statCard}>
+            <div style={s.statLabel}>Top category</div>
+            <div
+              style={{
+                ...s.statValue,
+                color: "#BA7517",
+                fontSize: 15,
+                textTransform: "capitalize",
+              }}
+            >
+              {topCategory
+                ? `${getCategoryConfig(topCategory).icon} ${topCategory}`
+                : "—"}
+            </div>
+          </div>
         </div>
 
-        {/* Chart + Insights */}
-        {filteredReceipts.length > 0 && (
-          <div style={styles.twoCol}>
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Spending by category</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={80}
-                    dataKey="value"
-                    nameKey="name"
-                  >
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(val) => formatCurrency(val)}
-                    contentStyle={{
-                      fontFamily: "'DM Sans', sans-serif",
-                      fontSize: 13,
-                      borderRadius: 8,
-                      border: "0.5px solid #D3D1C7",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+        {/* Budget bar — only when viewing a specific month */}
+        {isMonthView && filteredReceipts.length > 0 && (
+          <div className="fade-in" style={{ ...s.card, marginBottom: 14 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                marginBottom: 10,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={s.cardTitle}>Monthly budget</div>
+                {overBudget && (
+                  <span style={s.overBadge}>
+                    Over by {formatCurrency(overAmount)}
+                  </span>
+                )}
+              </div>
               <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                  marginTop: 8,
-                }}
+                style={{ fontSize: 13, color: overBudget ? "#791F1F" : "#555" }}
               >
-                {pieData.slice(0, 4).map((item, i) => (
-                  <div
-                    key={item.name}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      fontSize: 13,
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: PIE_COLORS[i % PIE_COLORS.length],
-                        flexShrink: 0,
-                      }}
-                    />
-                    <span
-                      style={{ color: "#666", textTransform: "capitalize" }}
-                    >
-                      {item.name}
-                    </span>
-                    <span
-                      style={{
-                        marginLeft: "auto",
-                        fontWeight: 500,
-                        color: "#222",
-                      }}
-                    >
-                      {formatCurrency(item.value)}
-                    </span>
-                  </div>
-                ))}
+                <span
+                  style={{
+                    fontWeight: 600,
+                    color: overBudget ? "#A32D2D" : "#1a1a1a",
+                  }}
+                >
+                  {formatCurrency(totalSpent)}
+                </span>
+                <span style={{ color: "#bbb" }}>
+                  {" "}
+                  / {formatCurrency(MONTHLY_BUDGET)}
+                </span>
               </div>
             </div>
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>AI spending insights</div>
-              <button
-                className="insight-btn"
-                onClick={getInsights}
-                disabled={loadingInsights}
-                style={styles.insightBtn}
-              >
-                {loadingInsights ? "Analyzing..." : "Analyze my spending"}
-              </button>
-              {insights && (
-                <div style={styles.insightText}>
-                  {insights
-                    .split("\n")
-                    .filter((l) => l.trim())
-                    .map((line, i) => (
-                      <p key={i} style={{ marginBottom: 10, lineHeight: 1.6 }}>
-                        {line.replace(/\*\*/g, "")}
-                      </p>
-                    ))}
-                </div>
-              )}
-              {!insights && (
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "#aaa",
-                    marginTop: 16,
-                    lineHeight: 1.6,
-                  }}
-                >
-                  Click above to get personalized insights about your spending
-                  patterns.
-                </p>
-              )}
+            {/* Bar track */}
+            <div style={s.barTrack}>
+              <div
+                className="budget-bar-fill"
+                style={{
+                  "--bar-w": `${budgetPct}%`,
+                  height: "100%",
+                  width: `${budgetPct}%`,
+                  borderRadius: 6,
+                  background: overBudget
+                    ? "linear-gradient(90deg, #E24B4A, #A32D2D)"
+                    : budgetPct > 80
+                      ? "linear-gradient(90deg, #EF9F27, #BA7517)"
+                      : "#185FA5",
+                  transition: "background 0.3s",
+                }}
+              />
+            </div>
+
+            {/* Sub-labels */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginTop: 8,
+                fontSize: 12,
+                color: "#aaa",
+              }}
+            >
+              <span>
+                {overBudget
+                  ? "Budget exceeded"
+                  : `${formatCurrency(remaining)} remaining`}
+              </span>
+              <span>{Math.round(budgetPct)}% used</span>
             </div>
           </div>
         )}
 
-        {/* Receipts List */}
-        <div style={styles.card}>
+        {/* Chart */}
+        {filteredReceipts.length > 0 && (
+          <div style={s.card}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 14,
+              }}
+            >
+              <div style={s.cardTitle}>Spending by category</div>
+              {receipts.length > 0 && (
+                <button
+                  className="insight-pill"
+                  onClick={handleInsightsClick}
+                  disabled={loadingInsights}
+                  style={s.insightPill}
+                >
+                  {loadingInsights ? "Analyzing..." : "✦ Insights"}
+                </button>
+              )}
+            </div>
+            <ResponsiveContainer width="100%" height={190}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={52}
+                  outerRadius={78}
+                  dataKey="value"
+                  nameKey="name"
+                >
+                  {pieData.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(val) => formatCurrency(val)}
+                  contentStyle={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontSize: 12,
+                    borderRadius: 8,
+                    border: "0.5px solid #D3D1C7",
+                    boxShadow: "none",
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 7,
+                marginTop: 4,
+              }}
+            >
+              {pieData.slice(0, 5).map((item, i) => (
+                <div
+                  key={item.name}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 13,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: PIE_COLORS[i % PIE_COLORS.length],
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{
+                      color: "#666",
+                      textTransform: "capitalize",
+                      flex: 1,
+                    }}
+                  >
+                    {item.name}
+                  </span>
+                  <span style={{ fontWeight: 500, color: "#222" }}>
+                    {formatCurrency(item.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Insights panel */}
+        {showInsights && (
+          <div className="fade-in" style={s.insightsPanel}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <div style={s.cardTitle}>Spending insights</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {insights && !loadingInsights && (
+                  <button
+                    onClick={getInsights}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      color: "#185FA5",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    Refresh
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowInsights(false)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#bbb",
+                    fontSize: 16,
+                    padding: "0 2px",
+                    lineHeight: 1,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            {loadingInsights ? (
+              <p style={{ fontSize: 13, color: "#aaa" }}>
+                Analyzing your spending...
+              </p>
+            ) : (
+              insights
+                .split("\n")
+                .filter((l) => l.trim())
+                .map((line, i) => (
+                  <p
+                    key={i}
+                    style={{
+                      fontSize: 13,
+                      color: "#555",
+                      lineHeight: 1.65,
+                      marginBottom: 9,
+                    }}
+                  >
+                    {line.replace(/\*\*/g, "")}
+                  </p>
+                ))
+            )}
+          </div>
+        )}
+
+        {/* Receipts list */}
+        <div style={s.card}>
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: 16,
+              marginBottom: 14,
             }}
           >
-            <div style={styles.cardTitle}>Recent receipts</div>
-            <span style={{ fontSize: 12, color: "#aaa" }}>
+            <div style={s.cardTitle}>Recent receipts</div>
+            <span style={{ fontSize: 12, color: "#bbb" }}>
               {filteredReceipts.length} item
               {filteredReceipts.length !== 1 ? "s" : ""}
             </span>
           </div>
-
           {filteredReceipts.length === 0 ? (
-            <div style={styles.emptyState}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>🧾</div>
-              <p style={{ color: "#aaa", fontSize: 14 }}>
+            <div style={{ textAlign: "center", padding: "32px 20px" }}>
+              <div style={{ fontSize: 30, marginBottom: 8 }}>🧾</div>
+              <p style={{ color: "#bbb", fontSize: 14 }}>
                 {receipts.length === 0
-                  ? "No receipts yet. Upload one above."
+                  ? "No receipts yet — upload one above."
                   : "No receipts for this period."}
               </p>
             </div>
           ) : (
-            filteredReceipts.map((r) => {
+            filteredReceipts.map((r, idx) => {
               const cat = getCategoryConfig(r.category);
               return (
                 <div
                   key={r.id}
                   className="receipt-row"
-                  style={styles.receiptRow}
+                  style={{
+                    ...s.receiptRow,
+                    borderBottom:
+                      idx === filteredReceipts.length - 1
+                        ? "none"
+                        : "0.5px solid #F0EEE8",
+                  }}
                 >
                   <div
-                    style={{ display: "flex", alignItems: "center", gap: 12 }}
+                    style={{ display: "flex", alignItems: "center", gap: 11 }}
                   >
-                    <div style={{ ...styles.receiptIcon, background: cat.bg }}>
+                    <div style={{ ...s.receiptIcon, background: cat.bg }}>
                       {cat.icon}
                     </div>
                     <div>
-                      <div style={styles.receiptStore}>{r.store_name}</div>
-                      <div style={styles.receiptMeta}>
+                      <div style={s.receiptStore}>{r.store_name}</div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 7,
+                          marginTop: 3,
+                        }}
+                      >
                         <span
                           style={{
-                            ...styles.badge,
+                            ...s.badge,
                             background: cat.bg,
                             color: cat.color,
                           }}
                         >
                           {r.category}
                         </span>
-                        <span>{formatDate(r.date)}</span>
+                        <span style={{ fontSize: 11, color: "#bbb" }}>
+                          {formatDate(r.date)}
+                        </span>
                       </div>
                     </div>
                   </div>
                   <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
                   >
-                    <span style={styles.receiptAmount}>
+                    <span style={s.receiptAmount}>
                       {formatCurrency(parseFloat(r.amount))}
                     </span>
                     <button
-                      className="delete-btn"
+                      className="del-btn"
                       onClick={() => deleteReceipt(r.id)}
-                      title="Delete"
+                      style={s.delBtn}
+                      title="Delete receipt"
                     >
-                      ✕
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -552,64 +747,59 @@ export default function App() {
   );
 }
 
-const styles = {
+const s = {
   root: {
     minHeight: "100vh",
     background: "#F7F6F3",
     fontFamily: "'DM Sans', sans-serif",
   },
   container: { maxWidth: 860, margin: "0 auto", padding: "32px 20px" },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 28,
-  },
+  header: { marginBottom: 24 },
   h1: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: 600,
     color: "#1a1a1a",
-    letterSpacing: "-0.5px",
+    letterSpacing: "-0.4px",
   },
-  subtitle: { fontSize: 14, color: "#888", marginTop: 3 },
-  headerBadge: { background: "#E6F1FB", padding: "6px 12px", borderRadius: 20 },
+  subtitle: { fontSize: 13, color: "#999", marginTop: 3 },
   uploadZone: {
     border: "1.5px dashed #D3D1C7",
     borderRadius: 12,
-    padding: "36px 20px",
+    padding: "32px 20px",
     textAlign: "center",
     cursor: "pointer",
-    marginBottom: 16,
+    marginBottom: 12,
     background: "#fff",
   },
-  uploadIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: "50%",
+  uploadIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     background: "#E6F1FB",
-    color: "#185FA5",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 20,
-    fontWeight: 600,
-    margin: "0 auto 12px",
+    margin: "0 auto 10px",
   },
   spinner: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     borderRadius: "50%",
-    border: "3px solid #E6F1FB",
+    border: "2.5px solid #E6F1FB",
     borderTopColor: "#185FA5",
     animation: "spin 0.8s linear infinite",
     margin: "0 auto",
   },
   msg: {
-    padding: "10px 16px",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "10px 14px",
     borderRadius: 8,
     fontSize: 13,
     fontWeight: 500,
-    marginBottom: 16,
+    marginBottom: 12,
+    border: "0.5px solid transparent",
   },
   filterBar: {
     display: "flex",
@@ -617,134 +807,111 @@ const styles = {
     alignItems: "center",
     background: "#fff",
     borderRadius: 10,
-    padding: "12px 16px",
-    marginBottom: 16,
+    padding: "10px 14px",
+    marginBottom: 14,
     border: "0.5px solid #E8E6DF",
   },
-  filterLabel: {
-    fontSize: 13,
-    color: "#666",
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
-  clearFilter: {
-    background: "#F1EFE8",
-    border: "none",
-    borderRadius: 6,
-    padding: "3px 10px",
-    fontSize: 12,
-    color: "#666",
-    cursor: "pointer",
-    fontWeight: 500,
-  },
-  filterControls: { display: "flex", gap: 8 },
   select: {
     border: "0.5px solid #D8D6CF",
     borderRadius: 8,
-    padding: "7px 12px",
+    padding: "6px 10px",
     fontSize: 13,
     color: "#333",
-    background: "#fff",
+    background: "#F7F6F3",
     fontFamily: "'DM Sans', sans-serif",
   },
   statsRow: {
     display: "grid",
     gridTemplateColumns: "repeat(3, 1fr)",
-    gap: 12,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 14,
   },
-  statCard: {
-    background: "#fff",
-    borderRadius: 10,
-    padding: "16px 18px",
-    border: "0.5px solid #E8E6DF",
-  },
+  statCard: { background: "#F1EFE8", borderRadius: 10, padding: "14px 16px" },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#888",
-    marginBottom: 6,
     fontWeight: 500,
     textTransform: "uppercase",
-    letterSpacing: "0.04em",
+    letterSpacing: "0.05em",
+    marginBottom: 6,
   },
-  statValue: {
-    fontSize: 22,
-    fontWeight: 600,
-    letterSpacing: "-0.5px",
-    textTransform: "capitalize",
-  },
-  twoCol: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 16,
-    marginBottom: 16,
-  },
+  statValue: { fontSize: 21, fontWeight: 600, letterSpacing: "-0.4px" },
   card: {
     background: "#fff",
     borderRadius: 12,
     padding: 20,
     border: "0.5px solid #E8E6DF",
-    marginBottom: 16,
+    marginBottom: 14,
   },
   cardTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: 600,
-    color: "#444",
+    color: "#999",
     textTransform: "uppercase",
-    letterSpacing: "0.05em",
-    marginBottom: 16,
+    letterSpacing: "0.06em",
   },
-  insightBtn: {
+  barTrack: {
     width: "100%",
-    padding: "11px 16px",
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 500,
-    background: "#185FA5",
-    color: "#fff",
-    border: "none",
-    cursor: "pointer",
+    height: 8,
+    background: "#F1EFE8",
+    borderRadius: 6,
+    overflow: "hidden",
   },
-  insightText: { fontSize: 13, color: "#555", marginTop: 14, lineHeight: 1.7 },
-  emptyState: { textAlign: "center", padding: "32px 20px" },
+  overBadge: {
+    fontSize: 11,
+    fontWeight: 600,
+    background: "#FCEBEB",
+    color: "#A32D2D",
+    padding: "2px 8px",
+    borderRadius: 6,
+    border: "0.5px solid #F7C1C1",
+  },
+  insightPill: {
+    background: "#fff",
+    border: "0.5px solid #D8D6CF",
+    borderRadius: 20,
+    padding: "5px 12px",
+    fontSize: 12,
+    color: "#555",
+    fontWeight: 500,
+    cursor: "pointer",
+    fontFamily: "'DM Sans', sans-serif",
+    transition: "all 0.15s",
+  },
+  insightsPanel: {
+    background: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    border: "0.5px solid #E8E6DF",
+    marginBottom: 14,
+  },
   receiptRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "12px 8px",
-    borderBottom: "0.5px solid #F0EEE8",
-    borderRadius: 6,
+    padding: "10px 6px",
   },
   receiptIcon: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 18,
+    fontSize: 17,
     flexShrink: 0,
   },
   receiptStore: { fontSize: 14, fontWeight: 500, color: "#222" },
-  receiptMeta: {
+  badge: { padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 500 },
+  receiptAmount: { fontSize: 14, fontWeight: 500, color: "#1a1a1a" },
+  delBtn: {
+    background: "none",
+    border: "0.5px solid transparent",
+    color: "#ccc",
+    padding: "5px 6px",
+    borderRadius: 6,
+    cursor: "pointer",
     display: "flex",
     alignItems: "center",
-    gap: 8,
-    marginTop: 3,
-    fontSize: 12,
-    color: "#888",
-  },
-  badge: {
-    padding: "2px 8px",
-    borderRadius: 20,
-    fontSize: 11,
-    fontWeight: 500,
-  },
-  receiptAmount: {
-    fontSize: 15,
-    fontWeight: 600,
-    color: "#1a1a1a",
-    fontFamily: "'DM Mono', monospace",
   },
 };

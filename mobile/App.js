@@ -18,17 +18,18 @@ import { PieChart } from "react-native-chart-kit";
 
 const API = "https://api.expense-tracker.sbs";
 const SCREEN_WIDTH = Dimensions.get("window").width;
+const MONTHLY_BUDGET = 300;
 
 const CATEGORY_CONFIG = {
-  groceries: { color: "#185FA5", bg: "#E6F1FB", icon: "🛒" },
-  food: { color: "#0F6E56", bg: "#E1F5EE", icon: "🍔" },
-  dining: { color: "#0F6E56", bg: "#E1F5EE", icon: "🍽️" },
-  restaurant: { color: "#BA7517", bg: "#FAEEDA", icon: "☕" },
-  shopping: { color: "#533AB7", bg: "#EEEDFE", icon: "🛍️" },
-  transport: { color: "#3B6D11", bg: "#EAF3DE", icon: "🚗" },
-  entertainment: { color: "#993556", bg: "#FBEAF0", icon: "🎬" },
-  health: { color: "#A32D2D", bg: "#FCEBEB", icon: "💊" },
-  other: { color: "#5F5E5A", bg: "#F1EFE8", icon: "📄" },
+  groceries: { color: "#0C447C", bg: "#E6F1FB", icon: "🛒" },
+  food: { color: "#085041", bg: "#E1F5EE", icon: "🍔" },
+  dining: { color: "#085041", bg: "#E1F5EE", icon: "🍽️" },
+  restaurant: { color: "#633806", bg: "#FAEEDA", icon: "☕" },
+  shopping: { color: "#3C3489", bg: "#EEEDFE", icon: "🛍️" },
+  transport: { color: "#27500A", bg: "#EAF3DE", icon: "🚗" },
+  entertainment: { color: "#72243E", bg: "#FBEAF0", icon: "🎬" },
+  health: { color: "#791F1F", bg: "#FCEBEB", icon: "💊" },
+  other: { color: "#444441", bg: "#F1EFE8", icon: "📄" },
 };
 
 const PIE_COLORS = [
@@ -73,8 +74,7 @@ const getCategoryConfig = (cat) =>
 const formatCurrency = (val) => `$${parseFloat(val).toFixed(2)}`;
 const formatDate = (dateString) => {
   if (!dateString) return "No date";
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
+  return new Date(dateString).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -87,8 +87,11 @@ export default function App() {
   const [message, setMessage] = useState(null);
   const [insights, setInsights] = useState("");
   const [loadingInsights, setLoadingInsights] = useState(false);
-  const [filterMonth, setFilterMonth] = useState("all");
-  const [filterYear, setFilterYear] = useState("all");
+  const [showInsights, setShowInsights] = useState(false);
+  const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth()));
+  const [filterYear, setFilterYear] = useState(
+    String(new Date().getFullYear()),
+  );
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   useEffect(() => {
@@ -131,7 +134,7 @@ export default function App() {
 
   const uploadReceipt = async (image) => {
     setUploading(true);
-    setMessage({ type: "loading", text: "Claude is reading your receipt..." });
+    setMessage({ type: "loading", text: "Scanning your receipt..." });
     const formData = new FormData();
     formData.append("receipt", {
       uri: image.uri,
@@ -166,6 +169,11 @@ export default function App() {
       setInsights(res.data.insights);
     } catch {}
     setLoadingInsights(false);
+  };
+
+  const handleInsightsPress = () => {
+    setShowInsights(true);
+    if (!insights) getInsights();
   };
 
   const deleteReceipt = (id) => {
@@ -217,9 +225,21 @@ export default function App() {
     name: name.charAt(0).toUpperCase() + name.slice(1),
     population: parseFloat(value.toFixed(2)),
     color: PIE_COLORS[i % PIE_COLORS.length],
-    legendFontColor: "#666",
+    legendFontColor: "#888",
     legendFontSize: 12,
   }));
+
+  // Budget
+  const isMonthView = filterMonth !== "all" && filterYear !== "all";
+  const budgetPct = Math.min((totalSpent / MONTHLY_BUDGET) * 100, 100);
+  const overBudget = totalSpent > MONTHLY_BUDGET;
+  const overAmount = totalSpent - MONTHLY_BUDGET;
+  const remaining = MONTHLY_BUDGET - totalSpent;
+  const barColor = overBudget
+    ? "#A32D2D"
+    : budgetPct > 80
+      ? "#BA7517"
+      : "#185FA5";
 
   const filterLabel = () => {
     if (filterMonth === "all" && filterYear === "all") return "All time";
@@ -228,21 +248,16 @@ export default function App() {
     return `${MONTHS[parseInt(filterMonth)]} ${filterYear}`;
   };
 
-  const hasFilter = filterMonth !== "all" || filterYear !== "all";
-
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#F7F6F3" />
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Expense tracker</Text>
-            <Text style={styles.headerSub}>AI-powered receipt scanning</Text>
-          </View>
-          <View style={styles.claudeBadge}>
-            <Text style={styles.claudeBadgeText}>Claude AI</Text>
-          </View>
+          <Text style={styles.headerTitle}>Expense tracker</Text>
+          <Text style={styles.headerSub}>
+            Receipt scanning & spending insights
+          </Text>
         </View>
 
         {/* Upload Buttons */}
@@ -252,7 +267,7 @@ export default function App() {
               style={[styles.uploadBtn, uploading && styles.disabledBtn]}
               onPress={takePhoto}
               disabled={uploading}
-              activeOpacity={0.85}
+              activeOpacity={0.82}
             >
               <Text style={styles.uploadBtnIcon}>📷</Text>
               <Text style={styles.uploadBtnText}>Take photo</Text>
@@ -264,20 +279,22 @@ export default function App() {
               ]}
               onPress={pickFromGallery}
               disabled={uploading}
-              activeOpacity={0.85}
+              activeOpacity={0.82}
             >
               <Text style={styles.uploadBtnIcon}>🖼️</Text>
               <Text style={styles.uploadBtnTextSecondary}>From gallery</Text>
             </TouchableOpacity>
           </View>
+
           {uploading && (
             <View style={styles.statusLoading}>
               <ActivityIndicator size="small" color="#185FA5" />
               <Text style={styles.statusLoadingText}>
-                Claude is reading your receipt...
+                Scanning your receipt...
               </Text>
             </View>
           )}
+
           {message && !uploading && (
             <View
               style={[
@@ -291,18 +308,32 @@ export default function App() {
             >
               <Text
                 style={[
+                  styles.statusIcon,
+                  {
+                    color:
+                      message.type === "success"
+                        ? "#085041"
+                        : message.type === "error"
+                          ? "#791F1F"
+                          : "#0C447C",
+                  },
+                ]}
+              >
+                {message.type === "success" ? "✓" : "✕"}
+              </Text>
+              <Text
+                style={[
                   styles.statusMsgText,
                   {
                     color:
                       message.type === "success"
-                        ? "#0F6E56"
+                        ? "#085041"
                         : message.type === "error"
-                          ? "#A32D2D"
-                          : "#185FA5",
+                          ? "#791F1F"
+                          : "#0C447C",
                   },
                 ]}
               >
-                {message.type === "success" ? "✓  " : "✕  "}
                 {message.text}
               </Text>
             </View>
@@ -315,28 +346,15 @@ export default function App() {
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
-              <Text style={styles.filterText}>Showing: </Text>
-              <Text style={styles.filterLabel}>{filterLabel()}</Text>
-              {hasFilter && (
-                <TouchableOpacity
-                  onPress={() => {
-                    setFilterMonth("all");
-                    setFilterYear("all");
-                  }}
-                  style={styles.clearBtn}
-                >
-                  <Text style={styles.clearBtnText}>Clear</Text>
-                </TouchableOpacity>
-              )}
+              <Text style={styles.filterText}>Showing </Text>
+              <Text style={styles.filterValue}>{filterLabel()}</Text>
             </View>
             <TouchableOpacity
               style={styles.filterBtn}
               onPress={() => setShowFilterModal(true)}
               activeOpacity={0.8}
             >
-              <Text style={styles.filterBtnText}>
-                Filter {hasFilter ? "●" : ""}
-              </Text>
+              <Text style={styles.filterBtnText}>Filter</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -361,7 +379,11 @@ export default function App() {
               <Text
                 style={[
                   styles.statValue,
-                  { color: "#BA7517", textTransform: "capitalize" },
+                  {
+                    color: "#BA7517",
+                    fontSize: 15,
+                    textTransform: "capitalize",
+                  },
                 ]}
               >
                 {getCategoryConfig(topCategory).icon} {topCategory}
@@ -370,15 +392,101 @@ export default function App() {
           )}
         </View>
 
+        {/* Budget bar — only when viewing a specific month */}
+        {isMonthView && filteredReceipts.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.card}>
+              {/* Header row */}
+              <View style={styles.budgetHeader}>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <Text style={styles.cardTitle}>Monthly budget</Text>
+                  {overBudget && (
+                    <View style={styles.overBadge}>
+                      <Text style={styles.overBadgeText}>
+                        Over by {formatCurrency(overAmount)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: overBudget ? "#A32D2D" : "#555",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontWeight: "700",
+                      color: overBudget ? "#A32D2D" : "#1a1a1a",
+                    }}
+                  >
+                    {formatCurrency(totalSpent)}
+                  </Text>
+                  <Text style={{ color: "#bbb" }}>
+                    {" "}
+                    / {formatCurrency(MONTHLY_BUDGET)}
+                  </Text>
+                </Text>
+              </View>
+
+              {/* Progress bar */}
+              <View style={styles.barTrack}>
+                <View
+                  style={[
+                    styles.barFill,
+                    { width: `${budgetPct}%`, backgroundColor: barColor },
+                  ]}
+                />
+              </View>
+
+              {/* Sub-labels */}
+              <View style={styles.barLabels}>
+                <Text
+                  style={[
+                    styles.barLabel,
+                    { color: overBudget ? "#A32D2D" : "#aaa" },
+                  ]}
+                >
+                  {overBudget
+                    ? "Budget exceeded"
+                    : `${formatCurrency(remaining)} remaining`}
+                </Text>
+                <Text style={styles.barLabel}>
+                  {Math.round(budgetPct)}% used
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Chart */}
         {pieData.length > 0 && (
           <View style={styles.section}>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Spending by category</Text>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Spending by category</Text>
+                {receipts.length > 0 && (
+                  <TouchableOpacity
+                    style={[
+                      styles.insightPill,
+                      loadingInsights && styles.disabledBtn,
+                    ]}
+                    onPress={handleInsightsPress}
+                    disabled={loadingInsights}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.insightPillText}>
+                      {loadingInsights ? "Analyzing..." : "✦ Insights"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <PieChart
                 data={pieData}
                 width={SCREEN_WIDTH - 64}
-                height={180}
+                height={170}
                 chartConfig={{
                   color: (opacity = 1) => `rgba(0,0,0,${opacity})`,
                 }}
@@ -388,12 +496,12 @@ export default function App() {
                 hasLegend={false}
               />
               <View style={styles.legendRow}>
-                {pieData.map((item) => (
+                {pieData.map((item, i) => (
                   <View key={item.name} style={styles.legendItem}>
                     <View
                       style={[
                         styles.legendDot,
-                        { backgroundColor: item.color },
+                        { backgroundColor: PIE_COLORS[i % PIE_COLORS.length] },
                       ]}
                     />
                     <Text style={styles.legendName}>{item.name}</Text>
@@ -407,42 +515,63 @@ export default function App() {
           </View>
         )}
 
-        {/* AI Insights */}
-        {receipts.length > 0 && (
+        {/* Insights panel */}
+        {showInsights && (
           <View style={styles.section}>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>AI spending insights</Text>
-              <TouchableOpacity
-                style={styles.insightBtn}
-                onPress={getInsights}
-                disabled={loadingInsights}
-                activeOpacity={0.85}
-              >
-                {loadingInsights ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.insightBtnText}>
-                    {insights ? "Refresh analysis" : "Analyze my spending"}
-                  </Text>
-                )}
-              </TouchableOpacity>
-              {insights ? (
-                <View style={{ marginTop: 14 }}>
-                  {insights
-                    .split("\n")
-                    .filter((l) => l.trim())
-                    .map((line, i) => (
-                      <Text key={i} style={styles.insightLine}>
-                        {line.replace(/\*\*/g, "")}
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Spending insights</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
+                  {insights && !loadingInsights && (
+                    <TouchableOpacity onPress={getInsights}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: "#185FA5",
+                          fontWeight: "600",
+                        }}
+                      >
+                        Refresh
                       </Text>
-                    ))}
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    onPress={() => setShowInsights(false)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={{ fontSize: 14, color: "#bbb" }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              {loadingInsights ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                    marginTop: 4,
+                  }}
+                >
+                  <ActivityIndicator size="small" color="#185FA5" />
+                  <Text style={{ fontSize: 13, color: "#aaa" }}>
+                    Analyzing your spending...
+                  </Text>
                 </View>
               ) : (
-                !loadingInsights && (
-                  <Text style={styles.insightPlaceholder}>
-                    Tap above to get personalized spending insights from Claude.
-                  </Text>
-                )
+                insights
+                  .split("\n")
+                  .filter((l) => l.trim())
+                  .map((line, i) => (
+                    <Text key={i} style={styles.insightLine}>
+                      {line.replace(/\*\*/g, "")}
+                    </Text>
+                  ))
               )}
             </View>
           </View>
@@ -519,7 +648,7 @@ export default function App() {
                       <TouchableOpacity
                         onPress={() => deleteReceipt(r.id)}
                         style={styles.deleteBtn}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       >
                         <Text style={styles.deleteBtnText}>✕</Text>
                       </TouchableOpacity>
@@ -531,7 +660,7 @@ export default function App() {
           </View>
         </View>
 
-        <View style={{ height: 32 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
 
       {/* Filter Modal */}
@@ -544,13 +673,21 @@ export default function App() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Filter receipts</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter receipts</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilterModal(false)}
+                style={styles.modalClose}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.modalSectionLabel}>Month</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={{ marginBottom: 20 }}
+              style={{ marginBottom: 22 }}
             >
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <TouchableOpacity
@@ -637,21 +774,9 @@ export default function App() {
             <TouchableOpacity
               style={styles.applyBtn}
               onPress={() => setShowFilterModal(false)}
-              activeOpacity={0.85}
+              activeOpacity={0.82}
             >
               <Text style={styles.applyBtnText}>Apply filter</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                setFilterMonth("all");
-                setFilterYear("all");
-                setShowFilterModal(false);
-              }}
-              style={{ marginTop: 12, alignItems: "center" }}
-            >
-              <Text style={{ fontSize: 14, color: "#999" }}>
-                Clear all filters
-              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -663,54 +788,40 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F7F6F3" },
   scroll: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
+  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 18 },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
     color: "#1a1a1a",
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
-  headerSub: { fontSize: 13, color: "#999", marginTop: 3 },
-  claudeBadge: {
-    backgroundColor: "#E6F1FB",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  claudeBadgeText: { fontSize: 11, color: "#185FA5", fontWeight: "600" },
+  headerSub: { fontSize: 12, color: "#aaa", marginTop: 3 },
   section: { paddingHorizontal: 16, marginBottom: 12 },
-  uploadRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  uploadRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
   uploadBtn: {
     flex: 1,
     backgroundColor: "#185FA5",
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 12,
-    alignItems: "center",
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 7,
   },
   uploadBtnSecondary: {
     flex: 1,
     backgroundColor: "#fff",
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 12,
-    alignItems: "center",
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 7,
     borderWidth: 0.5,
     borderColor: "#D8D6CF",
   },
   disabledBtn: { opacity: 0.5 },
-  uploadBtnIcon: { fontSize: 16 },
+  uploadBtnIcon: { fontSize: 15 },
   uploadBtnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
   uploadBtnTextSecondary: { color: "#333", fontWeight: "600", fontSize: 14 },
   statusLoading: {
@@ -720,39 +831,42 @@ const styles = StyleSheet.create({
     backgroundColor: "#E6F1FB",
     padding: 12,
     borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: "#B5D4F4",
   },
-  statusLoadingText: { color: "#185FA5", fontSize: 13, fontWeight: "500" },
-  statusMsg: { padding: 12, borderRadius: 10 },
-  statusSuccess: { backgroundColor: "#E1F5EE" },
-  statusError: { backgroundColor: "#FCEBEB" },
-  statusInfo: { backgroundColor: "#E6F1FB" },
-  statusMsgText: { fontSize: 13, fontWeight: "500", lineHeight: 18 },
+  statusLoadingText: { color: "#0C447C", fontSize: 13, fontWeight: "500" },
+  statusMsg: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 0.5,
+  },
+  statusSuccess: { backgroundColor: "#E1F5EE", borderColor: "#9FE1CB" },
+  statusError: { backgroundColor: "#FCEBEB", borderColor: "#F7C1C1" },
+  statusInfo: { backgroundColor: "#E6F1FB", borderColor: "#B5D4F4" },
+  statusIcon: { fontSize: 14, fontWeight: "600" },
+  statusMsgText: { fontSize: 13, fontWeight: "500", flex: 1, lineHeight: 18 },
   filterBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: "#fff",
     borderRadius: 10,
-    padding: 12,
+    padding: 11,
     borderWidth: 0.5,
     borderColor: "#E8E6DF",
   },
-  filterText: { fontSize: 13, color: "#888" },
-  filterLabel: { fontSize: 13, color: "#333", fontWeight: "600" },
-  clearBtn: {
-    backgroundColor: "#F1EFE8",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  clearBtnText: { fontSize: 11, color: "#666", fontWeight: "500" },
+  filterText: { fontSize: 13, color: "#aaa" },
+  filterValue: { fontSize: 13, color: "#333", fontWeight: "600" },
   filterBtn: {
-    backgroundColor: "#E6F1FB",
+    backgroundColor: "#F1EFE8",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  filterBtnText: { fontSize: 13, color: "#185FA5", fontWeight: "600" },
+  filterBtnText: { fontSize: 13, color: "#666", fontWeight: "600" },
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -763,21 +877,19 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     minWidth: 100,
-    backgroundColor: "#fff",
+    backgroundColor: "#F1EFE8",
     borderRadius: 10,
     padding: 14,
-    borderWidth: 0.5,
-    borderColor: "#E8E6DF",
   },
   statLabel: {
-    fontSize: 11,
-    color: "#999",
+    fontSize: 10,
+    color: "#888",
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 6,
   },
-  statValue: { fontSize: 20, fontWeight: "700", letterSpacing: -0.5 },
+  statValue: { fontSize: 19, fontWeight: "700", letterSpacing: -0.4 },
   card: {
     backgroundColor: "#fff",
     borderRadius: 14,
@@ -785,17 +897,59 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: "#E8E6DF",
   },
-  cardTitle: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#666",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 14,
   },
+  cardTitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#aaa",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  budgetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  barTrack: {
+    height: 8,
+    backgroundColor: "#F1EFE8",
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  barFill: { height: "100%", borderRadius: 6 },
+  barLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  barLabel: { fontSize: 11, color: "#aaa" },
+  overBadge: {
+    backgroundColor: "#FCEBEB",
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 0.5,
+    borderColor: "#F7C1C1",
+  },
+  overBadgeText: { fontSize: 11, fontWeight: "600", color: "#A32D2D" },
+  insightPill: {
+    backgroundColor: "#fff",
+    borderWidth: 0.5,
+    borderColor: "#D8D6CF",
+    borderRadius: 20,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+  },
+  insightPillText: { fontSize: 12, color: "#555", fontWeight: "500" },
   legendRow: { marginTop: 12, gap: 8 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 8 },
-  legendDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  legendDot: { width: 7, height: 7, borderRadius: 4, flexShrink: 0 },
   legendName: {
     fontSize: 13,
     color: "#666",
@@ -803,26 +957,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   legendValue: { fontSize: 13, fontWeight: "600", color: "#333" },
-  insightBtn: {
-    backgroundColor: "#185FA5",
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  insightBtnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
   insightLine: {
     fontSize: 13,
     color: "#555",
     lineHeight: 20,
-    marginBottom: 10,
-  },
-  insightPlaceholder: {
-    fontSize: 13,
-    color: "#aaa",
-    marginTop: 12,
-    lineHeight: 20,
+    marginBottom: 9,
+    marginTop: 4,
   },
   listHeader: {
     flexDirection: "row",
@@ -830,83 +970,86 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
-  listCount: { fontSize: 12, color: "#aaa" },
+  listCount: { fontSize: 12, color: "#bbb" },
   emptyState: { alignItems: "center", paddingVertical: 28 },
-  emptyIcon: { fontSize: 36, marginBottom: 10 },
+  emptyIcon: { fontSize: 34, marginBottom: 10 },
   emptyText: {
     fontSize: 15,
     fontWeight: "600",
     color: "#444",
     marginBottom: 4,
   },
-  emptySubtext: { fontSize: 13, color: "#aaa", textAlign: "center" },
+  emptySubtext: { fontSize: 13, color: "#bbb", textAlign: "center" },
   receiptRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderBottomWidth: 0.5,
     borderBottomColor: "#F0EEE8",
-    gap: 12,
+    gap: 11,
   },
   receiptIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  receiptIconText: { fontSize: 18 },
+  receiptIconText: { fontSize: 17 },
   receiptInfo: { flex: 1, minWidth: 0 },
   receiptStore: {
     fontSize: 14,
     fontWeight: "600",
     color: "#1a1a1a",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   receiptMeta: { flexDirection: "row", alignItems: "center", gap: 6 },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
+  badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   badgeText: { fontSize: 11, fontWeight: "600", textTransform: "capitalize" },
-  receiptDate: { fontSize: 11, color: "#aaa" },
-  receiptRight: { alignItems: "flex-end", gap: 6, flexShrink: 0 },
+  receiptDate: { fontSize: 11, color: "#bbb" },
+  receiptRight: { alignItems: "flex-end", gap: 4, flexShrink: 0 },
   receiptAmount: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: "#1a1a1a",
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
-  deleteBtn: { padding: 4 },
-  deleteBtnText: { fontSize: 12, color: "#ccc" },
+  deleteBtn: { paddingVertical: 2, paddingHorizontal: 4 },
+  deleteBtnText: { fontSize: 12, color: "#ddd" },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "flex-end",
   },
   modalSheet: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 44,
   },
   modalHandle: {
-    width: 36,
+    width: 34,
     height: 4,
     backgroundColor: "#D3D1C7",
     borderRadius: 2,
     alignSelf: "center",
     marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1a1a1a",
-    marginBottom: 20,
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 22,
   },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: "#1a1a1a" },
+  modalClose: { padding: 4 },
+  modalCloseText: { fontSize: 14, color: "#bbb" },
   modalSectionLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
-    color: "#888",
+    color: "#aaa",
     textTransform: "uppercase",
     letterSpacing: 0.6,
     marginBottom: 10,
